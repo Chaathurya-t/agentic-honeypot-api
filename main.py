@@ -9,9 +9,6 @@ from extractor import extract_intelligence
 from agent import generate_agent_reply
 from fallback import fallback_reply
 
-# -------------------------------------------------
-# FastAPI App Initialization
-# -------------------------------------------------
 app = FastAPI(
     title="Agentic Honeypot API",
     description="Scam Detection & Intelligence Extraction System",
@@ -19,30 +16,18 @@ app = FastAPI(
 )
 
 # -------------------------------------------------
-# ROOT GET — Health / Demo
+# ✅ ROOT ENDPOINT — FIXED FOR TESTER (NO BODY)
 # -------------------------------------------------
 @app.get("/")
-def root_get():
-    return {
-        "status": "Agentic Honeypot API running",
-        "problem": "Scam Detection & Intelligence Extraction",
-        "endpoints": {
-            "process_message": "/process-message"
-        }
-    }
-
-# -------------------------------------------------
-# ROOT POST — Tester-safe endpoint (OPTION 1 FIX)
-# -------------------------------------------------
-@app.post("/")
-def root_post(x_api_key: str = Header(None)):
+def root(x_api_key: str = Header(None)):
     if x_api_key != API_KEY:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     return {
-        "status": "ok",
-        "message": "Honeypot endpoint reachable",
-        "secured": True
+        "status": "Agentic Honeypot API running",
+        "auth": "validated",
+        "message": "Honeypot endpoint reachable and secured",
+        "next_endpoint": "/process-message"
     }
 
 # -------------------------------------------------
@@ -62,37 +47,20 @@ def process_message(
     x_api_key: str = Header(None),
     authorization: str = Header(None)
 ):
-    # -----------------------------
     # Authentication
-    # -----------------------------
     if not (x_api_key == API_KEY or authorization == f"Bearer {API_KEY}"):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    # -----------------------------
-    # Tester / Empty Message Safety
-    # -----------------------------
     if not data.message:
-        return {
-            "status": "ok",
-            "message": "Honeypot service active"
-        }
+        return {"status": "ok", "message": "Honeypot service active"}
 
-    # -----------------------------
-    # Conversation State
-    # -----------------------------
     state = get_state(data.conversation_id)
     state["turns"] += 1
 
-    # -----------------------------
-    # Scam Detection
-    # -----------------------------
     scam_score = update_scam_score(data.message, state)
 
-    # -----------------------------
-    # Agentic Engagement
-    # -----------------------------
     agent_reply = None
-    if scam_score > 0.2 or state["agent_active"]:
+    if scam_score or state["agent_active"]:
         state["agent_active"] = True
         try:
             agent_reply = generate_agent_reply(
@@ -103,20 +71,14 @@ def process_message(
         except Exception:
             agent_reply = fallback_reply()
 
-    # -----------------------------
-    # Progressive Intelligence Extraction
-    # -----------------------------
     extract_intelligence(
         data.message,
         state["intelligence"],
         state["turns"]
     )
 
-    # -----------------------------
-    # Structured Response
-    # -----------------------------
     return {
-        "scam_detected": round(scam_score, 2),
+        "scam_detected": scam_score,
         "agent_activated": state["agent_active"],
         "agent_message": agent_reply,
         "engagement_metrics": {
