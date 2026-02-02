@@ -7,7 +7,6 @@ from memory import get_state
 from detector import update_scam_score
 from extractor import extract_intelligence
 from agent import generate_agent_reply
-from fallback import fallback_reply
 
 # -------------------------------------------------
 # FastAPI App Initialization
@@ -19,7 +18,7 @@ app = FastAPI(
 )
 
 # -------------------------------------------------
-# Root Endpoint (UPGRADE 4 – Demo Polish)
+# Root Endpoint
 # -------------------------------------------------
 @app.get("/")
 def root():
@@ -35,8 +34,8 @@ def root():
 # Request Schema
 # -------------------------------------------------
 class MessageInput(BaseModel):
-    conversation_id: str = ""
-    message: str = ""
+    conversation_id: str
+    message: str
     history: list = []
 
 # -------------------------------------------------
@@ -55,13 +54,10 @@ def process_message(
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     # -----------------------------
-    # Tester Safety (empty message)
+    # Safety Check
     # -----------------------------
     if not data.message:
-        return {
-            "status": "ok",
-            "message": "Honeypot service active"
-        }
+        return {"status": "ok", "message": "Honeypot service active"}
 
     # -----------------------------
     # Conversation State
@@ -70,27 +66,27 @@ def process_message(
     state["turns"] += 1
 
     # -----------------------------
-    # Scam Detection
+    # Scam Detection (score-based)
     # -----------------------------
-    scam_detected = update_scam_score(data.message, state)
+    scam_score = update_scam_score(data.message, state)
+
+    # 🔥 ONCE SCAM DETECTED → AGENT LOCKS IN
+    if scam_score > 0:
+        state["agent_active"] = True
 
     # -----------------------------
-    # Agentic Handoff
+    # Agentic Response (NO FALLBACK)
     # -----------------------------
     agent_reply = None
-    if scam_detected or state["agent_active"]:
-        state["agent_active"] = True
-        try:
-            agent_reply = generate_agent_reply(
-                data.history,
-                data.message,
-                state["turns"]
-            )
-        except Exception:
-            agent_reply = fallback_reply()
+    if state["agent_active"]:
+        agent_reply = generate_agent_reply(
+            message=data.message,
+            history=data.history,
+            scam_score=scam_score
+        )
 
     # -----------------------------
-    # Progressive Intelligence Extraction (UPGRADE 3)
+    # Intelligence Extraction
     # -----------------------------
     extract_intelligence(
         data.message,
@@ -99,10 +95,10 @@ def process_message(
     )
 
     # -----------------------------
-    # Structured Response
+    # Final Structured Response
     # -----------------------------
     return {
-        "scam_detected": scam_detected,
+        "scam_detected": scam_score,
         "agent_activated": state["agent_active"],
         "agent_message": agent_reply,
         "engagement_metrics": {
@@ -111,3 +107,4 @@ def process_message(
         },
         "extracted_intelligence": state["intelligence"]
     }
+
