@@ -48,6 +48,7 @@ def generate_agent_reply(message: str, history: list, scam_score: float) -> str:
             "Can you confirm the **payment details** again?"
         ]
 
+
     # Add human hesitation for realism
     human_prefixes = [
         "Okay, just a second…",
@@ -58,3 +59,12 @@ def generate_agent_reply(message: str, history: list, scam_score: float) -> str:
 
     return f"{random.choice(human_prefixes)} {random.choice(prompts)}"
 
+    # Add human hesitation for realism
+    human_prefixes = [
+        "Okay, just a second…",
+        "Hmm, I’m trying now.",
+        "Alright, I’m doing it.",
+        "Wait, my app is loading…"
+    ]
+
+    return f"{random.choice(human_prefixes)} {random.choice(prompts)}"
