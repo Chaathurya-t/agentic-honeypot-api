@@ -1,75 +1,60 @@
-from openai import OpenAI
-from config import OPENAI_API_KEY
+import random
 
-# Initialize OpenAI client
-client = OpenAI(api_key=OPENAI_API_KEY)
-
-
-def agent_stage_prompt(turn_count: int) -> str:
+def generate_agent_reply(message: str, history: list, scam_score: float) -> str:
     """
-    Defines agent behavior based on conversation turn count.
-    This staged behavior increases engagement duration and realism.
-    """
-    if turn_count <= 1:
-        return (
-            "You are a worried but polite user. "
-            "You sound confused and ask what is happening."
-        )
-    elif turn_count <= 3:
-        return (
-            "You are cooperative but cautious. "
-            "Ask clarifying questions one at a time."
-        )
-    elif turn_count <= 5:
-        return (
-            "You are starting to trust the sender. "
-            "Ask clearly for payment or account details."
-        )
-    else:
-        return (
-            "You are ready to comply. "
-            "Ask them to resend UPI ID, bank account details, or payment link."
-        )
-
-
-def generate_agent_reply(history: list, message: str, turn_count: int) -> str:
-    """
-    Generates a realistic, memory-aware agent reply using an LLM.
-    The agent never reveals scam detection and behaves like a real human.
+    Generates a socially engineered agent reply
+    that encourages scammers to reveal intelligence
+    such as UPI IDs, bank details, and phishing links.
     """
 
-    system_prompt = f"""
-You are a real human user communicating with a service representative.
-You do NOT know this is a scam.
-Never mention scams, fraud, AI, bots, or detection.
-Be natural, polite, and slightly confused.
+    message_lower = message.lower()
 
-If payment details (UPI ID, bank account, or link) were mentioned earlier,
-refer to them naturally instead of asking the same question again.
+    # If scam confidence is low → act like a normal confused user
+    if scam_score < 0.5:
+        return "Sorry, I’m not sure I understand. Could you explain again?"
 
-{agent_stage_prompt(turn_count)}
-"""
+    # If scam detected → aggressive but believable extraction
+    prompts = []
 
-    messages = [{"role": "system", "content": system_prompt}]
+    # Payment / UPI extraction
+    if any(word in message_lower for word in ["pay", "payment", "upi", "transfer"]):
+        prompts.extend([
+            "Okay, I can pay. Please send your **UPI ID** clearly.",
+            "I’m ready to transfer the amount. Can you confirm the **UPI ID** and **account name**?",
+            "Before I pay, please confirm which **bank** this UPI is linked to."
+        ])
 
-    # Add conversation history for memory-aware behavior
-    for item in history:
-        if "role" in item and "content" in item:
-            messages.append(
-                {
-                    "role": item["role"],
-                    "content": item["content"]
-                }
-            )
+    # Bank account extraction
+    if any(word in message_lower for word in ["bank", "account", "blocked"]):
+        prompts.extend([
+            "My bank app is asking for your **account number** and **bank name**. Can you share that?",
+            "Can you confirm the **bank name and account number** so I can proceed?",
+            "The app shows an error. Please recheck and send your **account details**."
+        ])
 
-    # Add the latest scammer message
-    messages.append({"role": "user", "content": message})
+    # Phishing link extraction
+    if any(word in message_lower for word in ["link", "click", "verify", "update"]):
+        prompts.extend([
+            "The link isn’t opening properly. Can you resend the **full link**?",
+            "Is this link official? Please confirm before I click it again.",
+            "My browser shows a warning. Can you confirm this **verification link** is safe?"
+        ])
 
-    # Call the LLM
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=messages,
-        temperature=0.7
-    )
+    # If nothing matched, still push gently
+    if not prompts:
+        prompts = [
+            "I want to fix this quickly. What are the **exact steps** I need to follow?",
+            "Please guide me step by step so I don’t make a mistake.",
+            "Can you confirm the **payment details** again?"
+        ]
 
-    return response.choices[0].message.content.strip()
+    # Add human hesitation for realism
+    human_prefixes = [
+        "Okay, just a second…",
+        "Hmm, I’m trying now.",
+        "Alright, I’m doing it.",
+        "Wait, my app is loading…"
+    ]
+
+    return f"{random.choice(human_prefixes)} {random.choice(prompts)}"
+
