@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from pydantic import BaseModel
 import time
 
@@ -9,9 +9,6 @@ from extractor import extract_intelligence
 from agent import generate_agent_reply
 from fallback import fallback_reply
 
-# -------------------------------------------------
-# FastAPI App Initialization
-# -------------------------------------------------
 app = FastAPI(
     title="Agentic Honeypot API",
     description="Scam Detection & Intelligence Extraction System",
@@ -19,7 +16,7 @@ app = FastAPI(
 )
 
 # -------------------------------------------------
-# GET Root (Human / Browser Check)
+# ROOT ENDPOINT (GET)
 # -------------------------------------------------
 @app.get("/")
 def root():
@@ -32,18 +29,21 @@ def root():
     }
 
 # -------------------------------------------------
-# POST Root (REQUIRED for Endpoint Tester)
+# ROOT ENDPOINT (POST) ⭐ REQUIRED FOR TESTER ⭐
 # -------------------------------------------------
 @app.post("/")
-def root_post():
+async def root_post(request: Request, x_api_key: str = Header(None)):
+    if x_api_key != API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    # Accept ANY JSON body without validation
     return {
         "status": "ok",
-        "message": "Honeypot endpoint reachable",
-        "service": "Agentic Honeypot API"
+        "message": "Honeypot endpoint reachable"
     }
 
 # -------------------------------------------------
-# Request Schema
+# REQUEST SCHEMA
 # -------------------------------------------------
 class MessageInput(BaseModel):
     conversation_id: str = ""
@@ -51,7 +51,7 @@ class MessageInput(BaseModel):
     history: list = []
 
 # -------------------------------------------------
-# Main Honeypot Endpoint
+# MAIN HONEYPOT ENDPOINT
 # -------------------------------------------------
 @app.post("/process-message")
 def process_message(
@@ -59,37 +59,19 @@ def process_message(
     x_api_key: str = Header(None),
     authorization: str = Header(None)
 ):
-    # -----------------------------
-    # Authentication
-    # -----------------------------
     if not (x_api_key == API_KEY or authorization == f"Bearer {API_KEY}"):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    # -----------------------------
-    # Tester Safety (empty message)
-    # -----------------------------
     if not data.message:
-        return {
-            "status": "ok",
-            "message": "Honeypot service active"
-        }
+        return {"status": "ok"}
 
-    # -----------------------------
-    # Conversation State
-    # -----------------------------
     state = get_state(data.conversation_id)
     state["turns"] += 1
 
-    # -----------------------------
-    # Scam Detection (score-based)
-    # -----------------------------
     scam_score = update_scam_score(data.message, state)
 
-    # -----------------------------
-    # Agentic Handoff
-    # -----------------------------
     agent_reply = None
-    if scam_score >= 0.3 or state["agent_active"]:
+    if scam_score or state["agent_active"]:
         state["agent_active"] = True
         try:
             agent_reply = generate_agent_reply(
@@ -100,18 +82,12 @@ def process_message(
         except Exception:
             agent_reply = fallback_reply()
 
-    # -----------------------------
-    # Progressive Intelligence Extraction
-    # -----------------------------
     extract_intelligence(
         data.message,
         state["intelligence"],
         state["turns"]
     )
 
-    # -----------------------------
-    # Structured Response
-    # -----------------------------
     return {
         "scam_detected": scam_score,
         "agent_activated": state["agent_active"],
