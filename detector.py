@@ -1,16 +1,14 @@
-SCAM_SIGNALS = [
-    "urgent", "blocked", "verify", "otp",
-    "account", "upi", "bank", "click", "link",
-    "suspended", "immediately", "payment"
-]
-
-def update_scam_score(message: str, state: dict):
+def update_scam_score(message: str, history: list) -> float:
     msg = message.lower()
-    for word in SCAM_SIGNALS:
-        if word in msg:
-            state["scam_score"] += 1
+    score = 0.0
 
-    # Scam detected only after confidence threshold
-    if state["scam_score"] >= 2:
-        return True
-    return False
+    scam_keywords = [
+        "urgent", "blocked", "verify", "pay", "payment",
+        "upi", "bank", "account", "transfer", "click", "link"
+    ]
+
+    for word in scam_keywords:
+        if word in msg:
+            score += 0.15
+
+    return min(score, 1.0)
