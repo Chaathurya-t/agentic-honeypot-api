@@ -7,6 +7,7 @@ from memory import get_state
 from detector import update_scam_score
 from extractor import extract_intelligence
 from agent import generate_agent_reply
+from fallback import fallback_reply
 
 # -------------------------------------------------
 # FastAPI App Initialization
@@ -18,7 +19,7 @@ app = FastAPI(
 )
 
 # -------------------------------------------------
-# Root Endpoint
+# GET Root (Human / Browser Check)
 # -------------------------------------------------
 @app.get("/")
 def root():
@@ -31,11 +32,22 @@ def root():
     }
 
 # -------------------------------------------------
+# POST Root (REQUIRED for Endpoint Tester)
+# -------------------------------------------------
+@app.post("/")
+def root_post():
+    return {
+        "status": "ok",
+        "message": "Honeypot endpoint reachable",
+        "service": "Agentic Honeypot API"
+    }
+
+# -------------------------------------------------
 # Request Schema
 # -------------------------------------------------
 class MessageInput(BaseModel):
-    conversation_id: str
-    message: str
+    conversation_id: str = ""
+    message: str = ""
     history: list = []
 
 # -------------------------------------------------
@@ -54,10 +66,13 @@ def process_message(
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     # -----------------------------
-    # Safety Check
+    # Tester Safety (empty message)
     # -----------------------------
     if not data.message:
-        return {"status": "ok", "message": "Honeypot service active"}
+        return {
+            "status": "ok",
+            "message": "Honeypot service active"
+        }
 
     # -----------------------------
     # Conversation State
@@ -70,23 +85,23 @@ def process_message(
     # -----------------------------
     scam_score = update_scam_score(data.message, state)
 
-    # 🔥 ONCE SCAM DETECTED → AGENT LOCKS IN
-    if scam_score > 0:
-        state["agent_active"] = True
-
     # -----------------------------
-    # Agentic Response (NO FALLBACK)
+    # Agentic Handoff
     # -----------------------------
     agent_reply = None
-    if state["agent_active"]:
-        agent_reply = generate_agent_reply(
-            message=data.message,
-            history=data.history,
-            scam_score=scam_score
-        )
+    if scam_score >= 0.3 or state["agent_active"]:
+        state["agent_active"] = True
+        try:
+            agent_reply = generate_agent_reply(
+                data.history,
+                data.message,
+                state["turns"]
+            )
+        except Exception:
+            agent_reply = fallback_reply()
 
     # -----------------------------
-    # Intelligence Extraction
+    # Progressive Intelligence Extraction
     # -----------------------------
     extract_intelligence(
         data.message,
@@ -95,7 +110,7 @@ def process_message(
     )
 
     # -----------------------------
-    # Final Structured Response
+    # Structured Response
     # -----------------------------
     return {
         "scam_detected": scam_score,
@@ -107,4 +122,3 @@ def process_message(
         },
         "extracted_intelligence": state["intelligence"]
     }
-
